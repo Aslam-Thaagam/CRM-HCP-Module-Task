@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(npm install *)",
+      "Bash(python -c ' *)",
+      "Bash(find c:/Users/thaagam/GitHub/Thaagam-Field-V2/backend -name \"*.pyc\" -delete)",
+      "Bash(find c:/Users/thaagam/GitHub/Thaagam-Field-V2/backend -name \"__pycache__\" -type d -exec rm -rf {} +)",
+      "Bash(python -c \"from main import app; print\\('Import OK'\\)\")",
+      "Bash(python seed.py)",
+      "Bash(python -c \"from main import app; print\\('OK'\\)\")"
+    ]
+  }
+}

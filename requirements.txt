@@ -1,0 +1,30 @@
+# FastAPI & Server
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+
+# LangGraph & LangChain
+langgraph==0.2.53
+langchain-core==0.3.29
+langchain-groq==0.2.3
+langsmith==0.1.147
+
+# Database
+sqlalchemy==2.0.36
+aiomysql==0.2.0
+pymysql==1.1.1
+alembic==1.14.0
+
+# Pydantic & Config
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+
+# HTTP & Utilities
+httpx==0.28.1
+orjson==3.10.12
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# CORS & Async
+anyio==4.7.0
