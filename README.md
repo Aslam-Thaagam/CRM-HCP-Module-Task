@@ -1,434 +1,241 @@
-# Thaagam Field CRM — HCP Module
+# HCP Field CRM — AI-Powered Interaction Logger
 
-> **AI-First CRM for Life Science Field Representatives**
-> Round 1 Technical Assignment — Log Interaction Screen
-
----
-
-## Overview
-
-Thaagam Field is an AI-first Customer Relationship Management (CRM) system built for pharmaceutical and biotech field representatives. It focuses on the **HCP (Healthcare Professional) Module**, specifically the **Log Interaction Screen** — a dual-interface screen that allows reps to log HCP interactions either through a **structured form** or a **natural-language AI chat** powered by LangGraph + Groq.
-
-### What Makes It "AI-First"
-
-- A **LangGraph agent** orchestrates the entire conversational logging flow — greeting, extraction, clarification, summarization, confirmation, and saving.
-- **gemma2-9b-it** (via Groq) handles fast entity extraction and chat responses.
-- **llama-3.3-70b-versatile** (via Groq) handles complex reasoning and structured summaries.
-- The AI extracts HCP name, interaction type, date, products, sentiment, objections, and next steps from free-form text — no form filling required.
+A CRM tool built for pharma field reps. Instead of filling out long visit forms after every doctor meeting, you just tell the AI what happened in plain English and it does the rest.
 
 ---
 
-## Tech Stack
+## The problem it solves
 
-| Layer | Technology |
+Field reps visit 8–10 doctors a day. After every visit they have to manually log the HCP name, interaction type, date, topics discussed, materials shared, sentiment, outcomes, and follow-ups. That's a lot of form-filling at the end of a long day.
+
+This app cuts that down to a single chat message:
+
+> *"Met Dr. Arjun Sharma at Apollo this morning, email interaction, discussed Cardiomax efficacy, he was positive, shared the clinical trial brochure"*
+
+The AI reads that, fills in every form field, and you just hit save.
+
+---
+
+## Pages and what they do
+
+### Login / Signup
+When you open the app you land here. Create an account — it just takes a name, email, and password. Your session is stored locally so you stay logged in across refreshes.
+
+### Dashboard
+An overview of your activity. Shows total interactions, how many you've logged this month, how many HCPs are in your network, and a sentiment breakdown. The recent interactions list and a bar chart of interaction types by count are also here.
+
+### HCPs (Healthcare Professionals)
+This is your contact book. All the doctors and nurses you interact with live here.
+
+- Search by name, specialty, or institution
+- Filter by specialty using the chips at the top
+- Add a new HCP with the **+ Add HCP** button — fill in their name, specialty, institution, email, and phone
+- Each card shows their contact info and specialty badge
+
+You need to add HCPs here before the AI can log interactions for them. The chat bot will reject unknown doctor names and tell you what's available.
+
+### Log Interaction
+The main screen. Split into two halves:
+
+**Left — the form.** All the fields for logging a visit: HCP name (autocomplete from your HCP list), interaction type, date, time, contact detail (email address or phone number, appears automatically when the type is Email or Call), attendees, topics discussed, materials shared, samples distributed, sentiment, outcomes, and follow-up actions.
+
+**Right — the AI chat.** Just describe what happened. The bot extracts every detail from your message and auto-fills the form on the left in real time. If you mention a doctor not in the system, it tells you and shows who's available. When all required fields are filled, a save button appears in the chat.
+
+The form and chat are in sync — changes in one show up in the other immediately.
+
+---
+
+## How the AI chat works
+
+Every message you send goes to the backend along with the full conversation history and whatever's already been extracted. The AI (running on Groq's API) reads everything, extracts or updates fields, and responds asking for whatever's still missing.
+
+**What it understands:**
+
+Dates — plain English, ordinal, relative, everything:
+- `"today"`, `"yesterday"`, `"tomorrow"`
+- `"last Monday"`, `"next Friday"`, `"this Thursday"`
+- `"24th April"`, `"April 24th"`, `"24 April"`
+- `"June 15"`, `"next June"`, `"next year"`
+- `"2 days ago"`, `"3 weeks from now"`
+
+Times:
+- `"7pm"` → 19:00, `"10:30am"` → 10:30
+- `"morning"` → 09:00, `"afternoon"` → 14:00, `"evening"` → 18:00
+
+Interaction flow based on type:
+- If you say **Email** → bot asks which email address you used
+- If you say **Call** → bot asks which number you called
+
+The bot never asks for something you've already told it. Once all four required fields are filled (HCP name, type, date, topics), it marks the interaction complete and shows a save button.
+
+---
+
+## Tech stack
+
+| Layer | What's used |
 |---|---|
-| Frontend | React 18 + Redux Toolkit + Vite |
-| State Management | Redux (RTK slices: chat, interactions, hcps) |
-| Backend | Python 3.11 + FastAPI (async) |
-| AI Agent Framework | **LangGraph** (StateGraph with typed nodes) |
-| LLM Provider | **Groq** — `gemma2-9b-it` + `llama-3.3-70b-versatile` |
-| Database | MySQL (via SQLAlchemy async + aiomysql) |
-| ORM | SQLAlchemy 2.x (async) |
-| Font | Google Inter |
+| Frontend | React 18, Redux Toolkit, Vite, CSS Modules |
+| Backend | Python 3.11, FastAPI, SQLAlchemy (async) |
+| AI | LangGraph, Groq API (llama-3.1-8b-instant) |
+| Database | MySQL with aiomysql driver |
+| Auth | localStorage session (client-side) |
 
 ---
 
-## Project Structure
+## How to run it
 
-```
-Thaagam-Field-V2/
-├── backend/
-│   ├── agents/
-│   │   ├── interaction_agent.py   # LangGraph StateGraph — full agent pipeline
-│   │   └── prompts.py             # System prompt + extraction prompt templates
-│   ├── routers/
-│   │   ├── chat.py                # POST /api/chat — LangGraph turn handler
-│   │   ├── hcp.py                 # CRUD for HCP records
-│   │   └── interactions.py        # CRUD for interaction logs
-│   ├── config.py                  # Pydantic settings (Groq key, DB URL, CORS)
-│   ├── database.py                # Async SQLAlchemy engine + session factory
-│   ├── models.py                  # SQLAlchemy ORM models (HCP, Interaction, ChatSession)
-│   ├── schemas.py                 # Pydantic request/response schemas
-│   ├── seed.py                    # Dev seed script — populates HCP records
-│   ├── main.py                    # FastAPI app, CORS middleware, router registration
-│   ├── .env                       # Environment variables (Groq key, DB URL)
-│   └── requirements.txt           # Python dependencies
-│
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── LogInteractionScreen/
-│   │   │   │   ├── index.jsx          # Side-by-side layout (form left, chat right)
-│   │   │   │   ├── StructuredForm.jsx # Full structured form with validation
-│   │   │   │   └── ChatInterface.jsx  # AI chat UI with message bubbles
-│   │   │   ├── common/
-│   │   │   │   ├── Header.jsx
-│   │   │   │   └── Sidebar.jsx
-│   │   ├── store/
-│   │   │   ├── index.js
-│   │   │   └── slices/
-│   │   │       ├── chatSlice.js         # Chat state + sendChatMessage thunk
-│   │   │       ├── interactionSlice.js  # Form state + createInteraction thunk
-│   │   │       └── hcpSlice.js          # HCP list state
-│   │   ├── services/
-│   │   │   └── api.js             # Axios instance + hcpApi, interactionApi, chatApi
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── vite.config.js             # Vite dev server + proxy /api → localhost:8505
-│   └── package.json
-│
-├── requirements.txt               # Root-level Python deps (mirrors backend/)
-└── README.md
-```
+You need: **Node.js 18+**, **Python 3.11+**, **MySQL** running locally.
 
----
-
-## Setup & Running
-
-### Prerequisites
-
-- Python 3.11+
-- Node.js 18+
-- MySQL running locally on port 3306
-- A Groq API key from [console.groq.com](https://console.groq.com)
-
-### 1. Create the MySQL Database
-
-```sql
-CREATE DATABASE thaagam_crm CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-### 2. Backend Setup
+### 1. Clone the repo
 
 ```bash
-cd backend
+git clone https://github.com/your-username/hcp-field-crm.git
+cd hcp-field-crm
+```
+
+### 2. Set up the backend
+
+```bash
+# Create a virtual environment
+python -m venv .venv
+
+# Activate it
+.venv\Scripts\activate       # Windows
+source .venv/bin/activate    # Mac / Linux
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Configure environment
-# Edit .env with your Groq API key and MySQL credentials:
-# GROQ_API_KEY=gsk_...
-# DATABASE_URL=mysql+aiomysql://root:root@localhost:3306/thaagam_crm
-# CORS_ORIGINS=http://localhost:5173,http://localhost:5174,http://localhost:5175
-
-# Start the backend (port 8505)
-uvicorn main:app --host 0.0.0.0 --port 8505 --reload
-
-# (Optional) Seed sample HCP records
-python seed.py
 ```
 
-### 3. Frontend Setup
+Create a file called `.env` inside the `backend/` folder:
+
+```
+GROQ_API_KEY=your_groq_api_key_here
+DATABASE_URL=mysql+aiomysql://root:yourpassword@localhost:3306/log_crm
+CORS_ORIGINS=http://localhost:5173
+APP_SECRET_KEY=any-random-string
+APP_ENV=development
+```
+
+Get a free Groq API key at [console.groq.com](https://console.groq.com) — it's free to sign up and the free tier is enough to run this.
+
+Start the backend:
+
+```bash
+cd backend
+uvicorn main:app --host 127.0.0.1 --port 8002 --reload
+```
+
+You should see: `Uvicorn running on http://127.0.0.1:8002`
+
+> **No manual database setup needed.** On first start, the backend automatically creates the `log_crm` database and all tables if they don't exist. Just make sure MySQL is running — that's it.
+
+### 4. Set up the frontend
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start the dev server (proxies /api → http://localhost:8505)
 npm run dev
 ```
 
-Frontend runs at: **http://localhost:5173**
-Backend runs at: **http://localhost:8505**
-API docs (Swagger): **http://localhost:8505/docs**
+You should see: `Local: http://localhost:5173`
+
+### 5. Open the app
+
+Go to [http://localhost:5173](http://localhost:5173) in your browser.
+
+1. Click **Create an account** and sign up
+2. Go to the **HCPs** page and add a few doctors (name, specialty, institution)
+3. Go to **Log Interaction** and start chatting with the AI
 
 ---
 
-## Database Schema
+## Groq rate limits
 
-### `hcps`
-| Column | Type | Notes |
-|---|---|---|
-| id | VARCHAR(36) PK | UUID |
-| first_name | VARCHAR(100) | |
-| last_name | VARCHAR(100) | |
-| npi_number | VARCHAR(20) | Unique |
-| specialty | ENUM | Oncology, Cardiology, etc. |
-| institution | VARCHAR(255) | Hospital / clinic |
-| tier | INT | 1 = KOL, 3 = standard |
-| is_active | BOOL | Soft delete |
+The free Groq tier allows 100,000 tokens per day per model. Each chat message uses roughly 800–1,200 tokens (because the full conversation history is sent every time). If you hit the limit you'll see an error in chat — it resets at midnight UTC.
 
-### `interactions`
-| Column | Type | Notes |
-|---|---|---|
-| id | VARCHAR(36) PK | UUID |
-| hcp_id | FK → hcps.id | |
-| rep_id | VARCHAR(100) | Field rep identifier |
-| interaction_type | ENUM | In-Person Visit, Phone Call, etc. |
-| interaction_date | DATETIME | |
-| products_discussed | JSON | Array of product names |
-| key_points | TEXT | |
-| sentiment | ENUM | Very Positive → Very Negative |
-| samples_provided | JSON | `{product: qty}` |
-| source | VARCHAR(20) | `"form"` or `"chat"` |
-| raw_chat_transcript | TEXT | Stored when source = chat |
-
-### `chat_sessions`
-| Column | Type | Notes |
-|---|---|---|
-| session_id | VARCHAR(100) UNIQUE | Frontend-generated UUID |
-| messages | JSON | Full conversation history |
-| extracted_data | JSON | Current extraction state |
-| stage | VARCHAR(50) | greeting / extracting / clarifying / confirming / saved |
-| interaction_id | FK → interactions.id | Set once saved |
-
----
-
-## API Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/hcps/` | List HCPs (search/filter) |
-| POST | `/api/hcps/` | Create HCP |
-| PATCH | `/api/hcps/{id}` | Update HCP |
-| DELETE | `/api/hcps/{id}` | Deactivate HCP |
-| GET | `/api/interactions/` | List interactions (filter by HCP, rep, date) |
-| POST | `/api/interactions/` | Create interaction (form source) |
-| PATCH | `/api/interactions/{id}` | Edit interaction |
-| DELETE | `/api/interactions/{id}` | Delete interaction |
-| POST | `/api/chat/` | Send message to LangGraph agent |
-| GET | `/api/chat/{session_id}` | Retrieve chat session |
-| DELETE | `/api/chat/{session_id}` | Clear chat session |
-| GET | `/health` | Health check |
-
----
-
-## LangGraph Agent Architecture
-
-### Role of the Agent
-
-The LangGraph agent acts as a **conversational CRM assistant** for field reps. Instead of manually filling out a form, a rep describes their HCP visit in plain English. The agent:
-
-1. **Greets** the rep and explains what it needs.
-2. **Extracts** structured data (HCP, type, date, products, sentiment) from free-form text using `gemma2-9b-it`.
-3. **Identifies missing required fields** and asks concise clarifying questions one at a time.
-4. **Builds a structured summary** using `llama-3.3-70b-versatile` and presents it for confirmation.
-5. **Saves the interaction** to the database upon confirmation.
-
-### Graph Topology
-
-```
-[START]
-   │
-   ▼
-route_initial ──── (stage == greeting) ──→ greet ──→ [END]
-   │
-   └── (stage != greeting) ──→ parse_message
-                                    │
-                          (stage == confirming) ──→ await_confirmation
-                                    │                      │
-                          (else)    │              confirmed? ──→ save_interaction ──→ [END]
-                                    ▼                      │
-                               extract_data        (no) → build_summary ──→ [END]
-                                    │
-                          check_completeness
-                                    │
-                      missing? ──→ ask_clarification ──→ [END]
-                                    │
-                      complete? ──→ build_summary ──→ [END]
-```
-
-### State Definition (`InteractionState`)
+If you hit the daily limit on `llama-3.1-8b-instant`, you can change the model in `backend/agent/graph.py`:
 
 ```python
-class InteractionState(TypedDict):
-    session_id: str
-    messages: List[Any]        # Full conversation (LangChain message objects)
-    extracted_data: Dict       # Structured fields captured so far
-    missing_fields: List[str]  # Required fields still empty
-    stage: str                 # Current pipeline stage
-    confirmed: bool            # Whether rep confirmed the summary
-    interaction_saved: bool    # Whether DB write is complete
-    rep_id: Optional[str]
-    hcp_id: Optional[str]
+llm = ChatGroq(
+    api_key=os.getenv("GROQ_API_KEY"),
+    model="llama-3.1-8b-instant",  # change this
+    ...
+)
+```
+
+Other available models on Groq: `llama-3.3-70b-versatile`, `qwen/qwen3-32b`, `meta-llama/llama-4-scout-17b-16e-instruct`
+
+---
+
+## Project structure
+
+```
+hcp-field-crm/
+│
+├── backend/
+│   ├── agent/
+│   │   ├── graph.py          # LangGraph agent — prompt, extraction logic, HCP validation
+│   │   └── state.py          # InteractionState TypedDict (all fields the AI tracks)
+│   ├── routers/
+│   │   ├── chat.py           # POST /api/chat/ — runs the AI, validates HCP names
+│   │   ├── interactions.py   # GET / POST /api/interactions/
+│   │   └── hcps.py           # GET / POST /api/hcps/
+│   ├── utils/
+│   │   └── date_utils.py     # Date/time resolver (handles all natural language formats)
+│   ├── models.py             # SQLAlchemy ORM models
+│   ├── schemas.py            # Pydantic request/response schemas
+│   ├── database.py           # Async DB engine + session
+│   └── main.py               # FastAPI app, CORS, lifespan, router registration
+│
+└── frontend/
+    └── src/
+        ├── components/
+        │   ├── Auth/              # LoginPage.jsx, SignupPage.jsx
+        │   ├── Layout/            # Sidebar, Topbar, Layout wrapper
+        │   ├── DashboardPage/     # Overview stats and charts
+        │   ├── HCPsPage/          # HCP list, search, add HCP modal
+        │   └── LogInteractionScreen/  # Form + AI chat + interaction logs
+        ├── store/
+        │   └── slices/
+        │       ├── authSlice.js        # Login, signup, logout, localStorage session
+        │       ├── chatSlice.js        # Chat messages, send, reset
+        │       ├── interactionSlice.js # Form state, save, fetch logs
+        │       └── hcpSlice.js         # HCP list, create HCP
+        └── services/
+            └── api.js             # Axios wrapper for all API calls
 ```
 
 ---
 
-## Five LangGraph Tools
+## API endpoints
 
-### Tool 1: Log Interaction (`log_interaction`)
+| Method | Endpoint | What it does |
+|---|---|---|
+| GET | `/api/hcps/` | List all HCPs |
+| POST | `/api/hcps/` | Add a new HCP |
+| GET | `/api/hcps/{id}` | Get a single HCP |
+| GET | `/api/interactions/` | List all logged interactions |
+| POST | `/api/interactions/` | Save a new interaction |
+| POST | `/api/chat/` | Send a chat message, get AI response + extracted fields |
 
-**Purpose:** Capture a new HCP interaction from free-form text or form data and persist it to the database.
-
-**How it works:**
-1. The rep sends a natural-language description (e.g. *"Just visited Dr. Smith at MGH, discussed Keytruda for NSCLC, she was very receptive"*).
-2. `gemma2-9b-it` runs the `EXTRACTION_PROMPT` and returns a JSON object with all detected fields.
-3. The agent merges new extractions with existing session state (never overwrites confirmed data).
-4. Missing required fields (`hcp_name`, `interaction_type`, `interaction_date`, `key_points`) are identified.
-5. `llama-3.3-70b-versatile` builds a structured `<SUMMARY>` block and requests confirmation.
-6. On confirmation, the API layer resolves the HCP UUID from the database and writes the `Interaction` row.
-
-**LLM role:** Entity extraction (gemma2-9b-it), summarization + reasoning (llama-3.3-70b-versatile).
+The full interactive API docs are available at [http://localhost:8002/docs](http://localhost:8002/docs) when the backend is running.
 
 ---
 
-### Tool 2: Edit Interaction (`edit_interaction`)
+## What was built during this project
 
-**Purpose:** Allow a rep to modify an already-logged interaction — correct wrong information, add missed details, or update outcomes.
+Started as a Round 1 interview assignment — build an AI-first CRM HCP module in 60 hours. Here's what ended up getting built along the way:
 
-**How it works:**
-1. Rep references a previous interaction ("update my last log with Dr. Patel — she actually ordered 3 samples, not 2").
-2. The agent fetches the existing interaction record by ID or by recent history lookup.
-3. `gemma2-9b-it` extracts the delta — only the fields the rep wants changed.
-4. The agent presents the updated summary with changed fields highlighted.
-5. On confirmation, a `PATCH /api/interactions/{id}` call updates only the modified fields.
-
-**LLM role:** Delta extraction (what changed), confirmation of the update.
-
----
-
-### Tool 3: Summarize Interaction (`summarize_interaction`)
-
-**Purpose:** Generate a professional, concise narrative summary of an interaction for sharing with managers or inserting into CRM notes.
-
-**How it works:**
-1. Triggered when the rep says "summarize this" or "give me a write-up".
-2. `llama-3.3-70b-versatile` receives the full `extracted_data` and conversation history.
-3. Produces a 2–3 sentence professional narrative suitable for a CRM activity note.
-4. Rep can copy/paste or it auto-populates the `ai_summary` field on the Interaction record.
-
-**LLM role:** Long-form natural-language generation from structured data.
-
----
-
-### Tool 4: Suggest Follow-Up (`suggest_follow_up`)
-
-**Purpose:** Analyze the interaction content and suggest specific, actionable next steps based on the HCP's specialty, sentiment, and products discussed.
-
-**How it works:**
-1. Runs automatically after data extraction when sentiment or objections are detected.
-2. `llama-3.3-70b-versatile` receives: products discussed, HCP specialty, sentiment, objections.
-3. Returns 2–4 suggested follow-up actions (e.g. *"Send NSCLC Phase III trial data to Dr. Lee within 3 days"*, *"Schedule dinner program invitation for Q2"*).
-4. Suggestions appear as clickable chips that auto-populate the `next_steps` field.
-
-**LLM role:** Clinical + sales domain reasoning to generate contextually relevant follow-ups.
-
----
-
-### Tool 5: Search HCP (`search_hcp`)
-
-**Purpose:** Resolve an HCP name mentioned in conversation to a verified database record, handling partial names, typos, and titles.
-
-**How it works:**
-1. When the agent extracts an `hcp_name` string, it calls this tool before proceeding.
-2. Performs a fuzzy `ILIKE` search on `first_name` + `last_name` in the `hcps` table.
-3. If multiple matches are found, the agent asks the rep to disambiguate ("Did you mean Dr. Jane Smith (Oncology) or Dr. John Smith (Cardiology)?").
-4. If no match is found, the agent offers to create a new HCP record inline.
-5. On resolution, `hcp_id` is set in session state and used for the DB write.
-
-**LLM role:** Disambiguation phrasing when multiple matches exist.
-
----
-
-## UI: Log Interaction Screen
-
-The screen is split into two always-visible panels:
-
-```
-┌─────────────────────────────────┬──────────────────────────────┐
-│  📋 Interaction Details         │  🤖 AI Assistant             │
-│  (Structured Form)              │  gemma2-9b-it · Groq         │
-│                                 │                              │
-│  HCP Name        [dropdown]     │  Hi! I'm your AI assistant   │
-│  Interaction Type [dropdown]    │  for logging HCP             │
-│  Date & Time     [picker]       │  interactions...             │
-│  Duration        [input]        │                              │
-│  Location        [input]        │  > Just visited Dr. Smith    │
-│  Products        [tag pills]    │                              │
-│  Key Points      [textarea]     │  [message bubbles]           │
-│  Next Steps      [textarea]     │                              │
-│  Follow-up Date  [datepicker]   │  [textarea input]  [Send ↵]  │
-│  Sentiment       [radio pills]  │                              │
-│  Objections      [textarea]     │                              │
-│                                 │                              │
-│  [Clear]    [Log Interaction]   │                              │
-└─────────────────────────────────┴──────────────────────────────┘
-```
-
-- **Form → Chat**: AI-extracted data can be copied into the form with the "← Fill Form" button.
-- **Chat → Form**: After AI logging, the rep can review and edit the interaction in form view.
-- Both panels are always visible — no mode switching required.
-
----
-
-## Environment Variables
-
-```env
-# backend/.env
-GROQ_API_KEY=gsk_...               # From console.groq.com
-DATABASE_URL=mysql+aiomysql://root:root@localhost:3306/thaagam_crm
-APP_SECRET_KEY=your-secret-key
-APP_ENV=development
-CORS_ORIGINS=http://localhost:5173,http://localhost:5174,http://localhost:5175
-```
-
----
-
-## Key Dependencies
-
-### Backend
-```
-fastapi
-uvicorn[standard]
-sqlalchemy[asyncio]
-aiomysql
-pydantic-settings
-langchain-groq
-langgraph
-langchain-core
-python-dotenv
-```
-
-### Frontend
-```
-react + react-dom
-@reduxjs/toolkit + react-redux
-axios
-react-router-dom
-uuid
-vite + @vitejs/plugin-react
-```
-
----
-
-## Architecture Summary
-
-```
-Browser (React + Redux)
-    │
-    │  /api/* (proxied by Vite dev server)
-    ▼
-FastAPI (port 8505)
-    ├── /api/hcps        → hcp.py router        → MySQL (hcps table)
-    ├── /api/interactions → interactions.py      → MySQL (interactions table)
-    └── /api/chat         → chat.py router
-                               │
-                               ▼
-                         LangGraph Agent (interaction_agent.py)
-                               │
-                    ┌──────────┴──────────┐
-                    ▼                     ▼
-             gemma2-9b-it          llama-3.3-70b-versatile
-             (Groq API)            (Groq API)
-             Entity extraction     Summarization + Reasoning
-```
-
----
-
-## What I Learned from This Task
-
-Building this system clarified several real-world design challenges for life science field tools:
-
-1. **Conversational UX for structured data is hard** — The gap between "naturally described" and "database-ready" data requires careful prompt engineering and multi-turn state management. LangGraph's typed state machine solved this cleanly.
-
-2. **Field reps need speed, not forms** — The chat interface reflects how reps actually work: on the go, after a visit, dictating notes. The AI handles structuring so reps stay focused on the HCP relationship.
-
-3. **LLM reliability requires layered strategies** — Using `gemma2-9b-it` for fast extraction and falling back to `llama-3.3-70b-versatile` for complex reasoning and summarization balances cost, speed, and quality.
-
-4. **State persistence is non-trivial** — Each conversation turn must reload and rehydrate LangGraph state from the database, which requires careful serialization of LangChain message objects to/from JSON.
-
-5. **Pharma domain knowledge matters** — Products like Keytruda, Jardiance, and Dupixent, specialties, and interaction types are industry-specific. Baking this vocabulary into prompts significantly improved extraction accuracy.
+- Full split-screen layout with collapsible sidebar, topbar with search and notifications
+- AI chat that extracts structured data from free-text conversation
+- LangGraph stateful agent with a carefully optimized prompt (trimmed to reduce token waste)
+- Custom date/time resolver that handles every natural language format without depending entirely on the LLM
+- HCP name validation — the bot rejects unknown doctors, does fuzzy matching for partial names like "Dr. Arjun" → "Dr. Arjun Sharma", and lists available options
+- Conditional contact detail capture — asks for email address when type is Email, phone number when type is Call
+- HCPs page with search, specialty filters, and add-HCP modal
+- Dashboard with interaction stats, recent activity, type breakdown bar chart, sentiment split
+- Login and signup with localStorage session persistence
+- Dynamic chat textarea that grows as you type
+- Chat scroll stays inside the chat box (doesn't scroll the whole page)
+- Model fallback handling when Groq daily quota is exceeded

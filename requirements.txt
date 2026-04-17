@@ -28,3 +28,6 @@ passlib[bcrypt]==1.7.4
 
 # CORS & Async
 anyio==4.7.0
+
+# Date parsing
+dateparser>=1.2.0

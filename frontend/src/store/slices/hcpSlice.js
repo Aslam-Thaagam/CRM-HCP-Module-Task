@@ -1,38 +1,26 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { hcpApi } from "../../services/api";
 
-export const fetchHcps = createAsyncThunk(
+export const fetchHCPs = createAsyncThunk(
   "hcps/fetchAll",
-  async (params = {}, { rejectWithValue }) => {
+  async (_, { rejectWithValue }) => {
     try {
-      const res = await hcpApi.list(params);
+      const res = await hcpApi.list();
       return res.data;
-    } catch (err) {
-      return rejectWithValue(err.response?.data?.detail || "Failed to fetch HCPs");
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.detail || "Failed to fetch HCPs");
     }
   }
 );
 
-export const fetchHcp = createAsyncThunk(
-  "hcps/fetchOne",
-  async (id, { rejectWithValue }) => {
-    try {
-      const res = await hcpApi.get(id);
-      return res.data;
-    } catch (err) {
-      return rejectWithValue(err.response?.data?.detail || "HCP not found");
-    }
-  }
-);
-
-export const createHcp = createAsyncThunk(
+export const createHCP = createAsyncThunk(
   "hcps/create",
   async (data, { rejectWithValue }) => {
     try {
       const res = await hcpApi.create(data);
       return res.data;
-    } catch (err) {
-      return rejectWithValue(err.response?.data?.detail || "Failed to create HCP");
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.detail || "Failed to create HCP");
     }
   }
 );
@@ -41,35 +29,29 @@ const hcpSlice = createSlice({
   name: "hcps",
   initialState: {
     list: [],
-    selected: null,
     loading: false,
+    saving: false,
     error: null,
-    searchQuery: "",
+    saveSuccess: false,
   },
   reducers: {
-    setSearchQuery(state, action) {
-      state.searchQuery = action.payload;
-    },
-    clearSelected(state) {
-      state.selected = null;
-    },
-    clearError(state) {
-      state.error = null;
-    },
+    clearHCPError(state) { state.error = null; },
+    clearSaveSuccess(state) { state.saveSuccess = false; },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchHcps.pending, (state) => { state.loading = true; state.error = null; })
-      .addCase(fetchHcps.fulfilled, (state, action) => { state.loading = false; state.list = action.payload; })
-      .addCase(fetchHcps.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
-
-      .addCase(fetchHcp.pending, (state) => { state.loading = true; })
-      .addCase(fetchHcp.fulfilled, (state, action) => { state.loading = false; state.selected = action.payload; })
-      .addCase(fetchHcp.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
-
-      .addCase(createHcp.fulfilled, (state, action) => { state.list.unshift(action.payload); });
+      .addCase(fetchHCPs.pending, (s) => { s.loading = true; s.error = null; })
+      .addCase(fetchHCPs.fulfilled, (s, a) => { s.loading = false; s.list = a.payload; })
+      .addCase(fetchHCPs.rejected, (s, a) => { s.loading = false; s.error = a.payload; })
+      .addCase(createHCP.pending, (s) => { s.saving = true; s.error = null; s.saveSuccess = false; })
+      .addCase(createHCP.fulfilled, (s, a) => {
+        s.saving = false;
+        s.saveSuccess = true;
+        s.list.unshift(a.payload);
+      })
+      .addCase(createHCP.rejected, (s, a) => { s.saving = false; s.error = a.payload; });
   },
 });
 
-export const { setSearchQuery, clearSelected, clearError } = hcpSlice.actions;
+export const { clearHCPError, clearSaveSuccess } = hcpSlice.actions;
 export default hcpSlice.reducer;

@@ -1,241 +1,144 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
-import uuid
-
+from schemas import ChatRequest, ChatResponse
+from agent.graph import build_graph, ALL_FIELDS
+from langchain_core.messages import HumanMessage, AIMessage
 from database import get_db
-from models import ChatSession, Interaction, HCP
-from schemas import ChatRequest, ChatResponse, InteractionCreate
-from agents.interaction_agent import run_interaction_agent
-from models import InteractionTypeEnum, SentimentEnum
+from models import HCP
+from difflib import get_close_matches
+import re
 
-router = APIRouter(prefix="/api/chat", tags=["Chat"])
-
-
-def _map_interaction_type(raw: str) -> InteractionTypeEnum:
-    mapping = {
-        "in-person visit": InteractionTypeEnum.in_person_visit,
-        "in person visit": InteractionTypeEnum.in_person_visit,
-        "virtual meeting": InteractionTypeEnum.virtual_meeting,
-        "phone call": InteractionTypeEnum.phone_call,
-        "email": InteractionTypeEnum.email,
-        "conference/congress": InteractionTypeEnum.conference,
-        "conference": InteractionTypeEnum.conference,
-        "dinner program": InteractionTypeEnum.dinner_program,
-        "lunch & learn": InteractionTypeEnum.lunch_learn,
-        "lunch and learn": InteractionTypeEnum.lunch_learn,
-    }
-    return mapping.get(raw.lower().strip(), InteractionTypeEnum.other)
+router = APIRouter()
 
 
-def _map_sentiment(raw: str) -> SentimentEnum:
-    mapping = {
-        "very positive": SentimentEnum.very_positive,
-        "positive": SentimentEnum.positive,
-        "neutral": SentimentEnum.neutral,
-        "negative": SentimentEnum.negative,
-        "very negative": SentimentEnum.very_negative,
-    }
-    return mapping.get(raw.lower().strip(), SentimentEnum.neutral)
+def _extract_mentioned_dr(text: str) -> str | None:
+    """Pull out 'Dr. X Y' or 'Dr X' from a raw message string."""
+    m = re.search(r'\bdr\.?\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)', text, re.IGNORECASE)
+    return m.group(0).strip() if m else None
 
 
-async def _resolve_hcp_id(hcp_name: str, db: AsyncSession) -> str | None:
-    """Try to find an HCP by name. Returns UUID or None."""
-    if not hcp_name:
-        return None
-    parts = hcp_name.replace("Dr.", "").replace("Dr ", "").strip().split()
-    if not parts:
-        return None
-
-    from sqlalchemy import or_
-    from models import HCP
-
-    if len(parts) >= 2:
-        first, last = parts[0], parts[-1]
-        result = await db.execute(
-            select(HCP).where(
-                HCP.first_name.ilike(f"%{first}%"),
-                HCP.last_name.ilike(f"%{last}%"),
-            )
-        )
-    else:
-        result = await db.execute(
-            select(HCP).where(
-                or_(
-                    HCP.first_name.ilike(f"%{parts[0]}%"),
-                    HCP.last_name.ilike(f"%{parts[0]}%"),
-                )
-            )
-        )
-    hcp = result.scalar_one_or_none()
-    return hcp.id if hcp else None
+def _normalise(name: str) -> str:
+    return name.lower().replace("dr.", "").replace("dr ", "").strip()
 
 
-async def _persist_interaction(
-    extracted: dict,
-    session: ChatSession,
-    db: AsyncSession,
-) -> Interaction | None:
-    """Convert extracted agent data into a saved Interaction row."""
-    hcp_id = session.hcp_id
-    if not hcp_id and extracted.get("hcp_name"):
-        hcp_id = await _resolve_hcp_id(extracted["hcp_name"], db)
+def _validate_hcp(extracted_name: str | None, hcp_names: list[str]) -> tuple[bool, str | None]:
+    """
+    Returns (is_valid, corrected_name_or_None).
+    Tries exact → prefix → fuzzy matching.
+    """
+    if not extracted_name or not hcp_names:
+        return True, extracted_name
 
-    if not hcp_id:
-        return None
+    norm_input = _normalise(extracted_name)
 
-    # Parse date
-    raw_date = extracted.get("interaction_date")
-    try:
-        interaction_date = datetime.fromisoformat(raw_date) if raw_date else datetime.utcnow()
-    except (ValueError, TypeError):
-        interaction_date = datetime.utcnow()
+    # Exact match
+    for name in hcp_names:
+        if norm_input == _normalise(name):
+            return True, name
 
-    # Parse follow-up date
-    raw_follow_up = extracted.get("follow_up_date")
-    try:
-        follow_up_date = datetime.fromisoformat(raw_follow_up) if raw_follow_up else None
-    except (ValueError, TypeError):
-        follow_up_date = None
+    # Partial / prefix match — "Raja" matches "Dr. Raja Kumar"
+    partial = [n for n in hcp_names if norm_input in _normalise(n)]
+    if len(partial) == 1:
+        return True, partial[0]
+    if len(partial) > 1:
+        # Ambiguous partial → return closest
+        return True, partial[0]
 
-    interaction = Interaction(
-        hcp_id=hcp_id,
-        rep_id=session.rep_id,
-        interaction_type=_map_interaction_type(extracted.get("interaction_type", "other")),
-        interaction_date=interaction_date,
-        duration_minutes=extracted.get("duration_minutes"),
-        location=extracted.get("location"),
-        products_discussed=extracted.get("products_discussed") or [],
-        key_points=extracted.get("key_points"),
-        next_steps=extracted.get("next_steps"),
-        follow_up_date=follow_up_date,
-        sentiment=_map_sentiment(extracted.get("sentiment", "neutral")) if extracted.get("sentiment") else None,
-        samples_provided=extracted.get("samples_provided") or {},
-        objections=extracted.get("objections"),
-        source="chat",
-        raw_chat_transcript=str(session.messages),
-    )
-    db.add(interaction)
-    await db.flush()
-    await db.refresh(interaction)
-    return interaction
+    # Fuzzy match using difflib
+    normed_names = [_normalise(n) for n in hcp_names]
+    close_normed = get_close_matches(norm_input, normed_names, n=3, cutoff=0.55)
+    close_names = [hcp_names[normed_names.index(n)] for n in close_normed]
+
+    return False, None  # not found — let caller build the error
 
 
 @router.post("/", response_model=ChatResponse)
-async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
-    from sqlalchemy.exc import IntegrityError
+async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+    # Fetch HCP roster
+    result = await db.execute(select(HCP).where(HCP.is_active != 0))
+    hcps = result.scalars().all()
+    hcp_names = [f"Dr. {h.first_name} {h.last_name}" for h in hcps]
 
-    # Load or create session — handle race condition from React StrictMode double-fire
-    session = None
-    session_id = payload.session_id or str(uuid.uuid4())
+    # Build message list for LangGraph
+    lc_messages = [
+        HumanMessage(content=m.content) if m.role == "user"
+        else AIMessage(content=m.content)
+        for m in request.messages
+    ]
 
-    result = await db.execute(
-        select(ChatSession).where(ChatSession.session_id == session_id)
-    )
-    session = result.scalar_one_or_none()
-
-    if not session:
-        try:
-            session = ChatSession(
-                session_id=session_id,
-                rep_id=payload.rep_id,
-                messages=[],
-                extracted_data={},
-                stage="greeting",
-            )
-            db.add(session)
-            await db.flush()
-        except IntegrityError:
-            # Another concurrent request already created it — roll back and re-fetch
-            await db.rollback()
-            result = await db.execute(
-                select(ChatSession).where(ChatSession.session_id == session_id)
-            )
-            session = result.scalar_one_or_none()
-            if not session:
-                raise
-
-    # Build existing state for the agent
-    existing_state = {
-        "messages": session.messages or [],
-        "extracted_data": session.extracted_data or {},
-        "stage": session.stage or "greeting",
-        "hcp_id": str(session.hcp_id) if session.hcp_id else None,
+    cs = request.current_state or {}
+    initial_state = {
+        "messages": lc_messages,
+        "is_complete": False,
+        "missing_required": None,
+        **{f: cs.get(f) for f in ALL_FIELDS},
     }
 
-    # Run LangGraph agent
-    agent_result = await run_interaction_agent(
-        session_id=session.session_id,
-        user_message=payload.message,
-        existing_state=existing_state,
-        rep_id=payload.rep_id or session.rep_id,
-    )
+    # Rebuild graph with current HCP list each call (lightweight compile)
+    graph = build_graph(hcp_names)
+    result_state = await graph.ainvoke(initial_state)
 
-    # Update session state
-    session.messages = agent_result["messages"]
-    session.extracted_data = agent_result["extracted_data"]
-    session.stage = agent_result["stage"]
-    session.updated_at = datetime.utcnow()
-
-    saved_interaction_id = None
-
-    # Persist interaction if agent confirmed save
-    if agent_result.get("interaction_saved") and session.stage == "saved":
-        interaction = await _persist_interaction(
-            agent_result["extracted_data"], session, db
-        )
-        if interaction:
-            session.interaction_id = interaction.id
-            saved_interaction_id = str(interaction.id)
-
-    await db.flush()
-
-    return ChatResponse(
-        session_id=session.session_id,
-        reply=agent_result["reply"],
-        stage=agent_result["stage"],
-        extracted_data=agent_result["extracted_data"],
-        interaction_saved=agent_result.get("interaction_saved", False),
-        interaction_id=saved_interaction_id,
-        messages=[
-            {"role": m["role"], "content": m["content"]}
-            for m in (agent_result["messages"] or [])
-        ],
-    )
-
-
-@router.get("/{session_id}", response_model=ChatResponse)
-async def get_session(session_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(ChatSession).where(ChatSession.session_id == session_id)
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Chat session not found")
-
-    messages = session.messages or []
     last_ai = next(
-        (m["content"] for m in reversed(messages) if m["role"] == "assistant"),
-        ""
+        (m for m in reversed(result_state["messages"]) if isinstance(m, AIMessage)),
+        None,
     )
+    message_text = last_ai.content if last_ai else "I couldn't process that. Please try again."
+
+    extracted_data = {f: result_state.get(f) for f in ALL_FIELDS}
+
+    # ── Backend safety net: validate hcp_name even if LLM missed it ──────────
+    # Also catch: user mentioned a Dr name but LLM already cleared hcp_name to null
+    extracted_hcp = extracted_data.get("hcp_name")
+    prev_hcp = (request.current_state or {}).get("hcp_name")
+
+    if not extracted_hcp and not prev_hcp and hcp_names:
+        last_msg = next((m.content for m in reversed(request.messages) if m.role == "user"), "")
+        mentioned = _extract_mentioned_dr(last_msg)
+        if mentioned:
+            is_valid, corrected = _validate_hcp(mentioned, hcp_names)
+            if not is_valid:
+                norm_input = _normalise(mentioned)
+                normed = [_normalise(n) for n in hcp_names]
+                close_normed = get_close_matches(norm_input, normed, n=4, cutoff=0.45)
+                suggestions = [hcp_names[normed.index(n)] for n in close_normed]
+                shown = suggestions if suggestions else hcp_names[:5]
+                names_str = ", ".join(shown)
+                if suggestions:
+                    message_text = f"I don't see '{mentioned}' in the portal — did you mean {names_str}? Please use the registered name so I can log the visit correctly."
+                else:
+                    message_text = f"'{mentioned}' isn't registered here yet. Some available HCPs: {names_str}. You can add new doctors from the HCPs page."
+            elif corrected:
+                extracted_data["hcp_name"] = corrected
+
+    if extracted_hcp:
+        is_valid, corrected = _validate_hcp(extracted_hcp, hcp_names)
+        if is_valid and corrected and corrected != extracted_hcp:
+            # Auto-corrected partial match → silently use full name
+            extracted_data["hcp_name"] = corrected
+        elif not is_valid:
+            # Not in the system — generate a clear error response
+            extracted_data["hcp_name"] = None
+            result_state["is_complete"] = False
+
+            # Find closest suggestions
+            norm_input = _normalise(extracted_hcp)
+            normed = [_normalise(n) for n in hcp_names]
+            close_normed = get_close_matches(norm_input, normed, n=4, cutoff=0.45)
+            suggestions = [hcp_names[normed.index(n)] for n in close_normed]
+            shown = suggestions if suggestions else hcp_names[:5]
+
+            if suggestions:
+                names_str = ", ".join(suggestions)
+                message_text = f"I don't see '{extracted_hcp}' in the portal — did you mean {names_str}? Please use the registered name so I can log the visit correctly."
+            else:
+                names_str = ", ".join(hcp_names[:5])
+                message_text = f"'{extracted_hcp}' isn't registered here yet. Some available HCPs: {names_str}. You can add new doctors from the HCPs page."
+
     return ChatResponse(
-        session_id=session.session_id,
-        reply=last_ai,
-        stage=session.stage,
-        extracted_data=session.extracted_data or {},
-        interaction_saved=session.stage == "saved",
-        interaction_id=str(session.interaction_id) if session.interaction_id else None,
-        messages=messages,
+        message=message_text,
+        extracted_data=extracted_data,
+        is_complete=result_state.get("is_complete", False),
+        missing_required=result_state.get("missing_required"),
+        ai_suggested_followups=result_state.get("ai_suggested_followups"),
     )
-
-
-@router.delete("/{session_id}", status_code=204)
-async def clear_session(session_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(ChatSession).where(ChatSession.session_id == session_id)
-    )
-    session = result.scalar_one_or_none()
-    if session:
-        await db.delete(session)
-        await db.flush()

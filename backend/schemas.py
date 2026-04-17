@@ -1,141 +1,77 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
+from typing import Optional, List
 from datetime import datetime
-from models import SpecialtyEnum, InteractionTypeEnum, SentimentEnum
 
-# MySQL stores UUIDs as CHAR(36) strings
-UUID = str
-
-
-# ─── HCP Schemas ────────────────────────────────────────────────────────────
 
 class HCPBase(BaseModel):
     first_name: str
     last_name: str
-    npi_number: Optional[str] = None
+    specialty: Optional[str] = None
+    institution: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
-    specialty: SpecialtyEnum = SpecialtyEnum.other
-    institution: Optional[str] = None
-    address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip_code: Optional[str] = None
-    tier: Optional[int] = 3
-    notes: Optional[str] = None
 
 
 class HCPCreate(HCPBase):
     pass
 
 
-class HCPUpdate(BaseModel):
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    npi_number: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    specialty: Optional[SpecialtyEnum] = None
-    institution: Optional[str] = None
-    address: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip_code: Optional[str] = None
-    tier: Optional[int] = None
-    notes: Optional[str] = None
-    is_active: Optional[bool] = None
-
-
 class HCPResponse(HCPBase):
-    id: UUID
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
+    id: str
+    name: Optional[str] = None
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
+    @classmethod
+    def from_orm_with_name(cls, hcp):
+        data = cls.model_validate(hcp)
+        data.name = hcp.name
+        return data
 
-# ─── Interaction Schemas ─────────────────────────────────────────────────────
 
 class InteractionBase(BaseModel):
-    hcp_id: UUID
-    interaction_type: InteractionTypeEnum
-    interaction_date: datetime
-    duration_minutes: Optional[int] = None
-    location: Optional[str] = None
-    products_discussed: Optional[List[str]] = []
-    key_points: Optional[str] = None
-    next_steps: Optional[str] = None
-    follow_up_date: Optional[datetime] = None
-    sentiment: Optional[SentimentEnum] = None
-    samples_provided: Optional[Dict[str, int]] = {}
-    objections: Optional[str] = None
+    hcp_name: str
+    interaction_type: str = "Meeting"
+    interaction_date: str
+    interaction_time: Optional[str] = None
+    contact_detail: Optional[str] = None
+    attendees: Optional[str] = None
+    topics_discussed: Optional[str] = None
+    materials_shared: Optional[List[str]] = None
+    samples_distributed: Optional[List[str]] = None
+    sentiment: Optional[str] = "Neutral"
+    outcomes: Optional[str] = None
+    follow_up_actions: Optional[str] = None
+    ai_suggested_followups: Optional[List[str]] = None
 
 
 class InteractionCreate(InteractionBase):
-    source: str = "form"
-
-
-class InteractionUpdate(BaseModel):
-    interaction_type: Optional[InteractionTypeEnum] = None
-    interaction_date: Optional[datetime] = None
-    duration_minutes: Optional[int] = None
-    location: Optional[str] = None
-    products_discussed: Optional[List[str]] = None
-    key_points: Optional[str] = None
-    next_steps: Optional[str] = None
-    follow_up_date: Optional[datetime] = None
-    sentiment: Optional[SentimentEnum] = None
-    samples_provided: Optional[Dict[str, int]] = None
-    objections: Optional[str] = None
+    hcp_id: Optional[int] = None
 
 
 class InteractionResponse(InteractionBase):
-    id: UUID
-    rep_id: Optional[str]
-    ai_summary: Optional[str]
-    source: str
+    id: int
+    hcp_id: Optional[int]
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
 
 
-# ─── Chat Schemas ─────────────────────────────────────────────────────────────
-
 class ChatMessage(BaseModel):
-    role: str  # "user" | "assistant"
+    role: str
     content: str
-    timestamp: Optional[datetime] = None
 
 
 class ChatRequest(BaseModel):
-    session_id: Optional[str] = None
-    message: str
-    rep_id: Optional[str] = None
+    messages: List[ChatMessage]
+    current_state: Optional[dict] = None
 
 
 class ChatResponse(BaseModel):
-    session_id: str
-    reply: str
-    stage: str
-    extracted_data: Optional[Dict[str, Any]] = {}
-    interaction_saved: bool = False
-    interaction_id: Optional[str] = None
-    messages: Optional[List[ChatMessage]] = []
-
-
-class ExtractedInteractionData(BaseModel):
-    hcp_name: Optional[str] = None
-    hcp_id: Optional[str] = None
-    interaction_type: Optional[str] = None
-    interaction_date: Optional[str] = None
-    duration_minutes: Optional[int] = None
-    location: Optional[str] = None
-    products_discussed: Optional[List[str]] = []
-    key_points: Optional[str] = None
-    next_steps: Optional[str] = None
-    follow_up_date: Optional[str] = None
-    sentiment: Optional[str] = None
-    samples_provided: Optional[Dict[str, int]] = {}
-    objections: Optional[str] = None
+    message: str
+    extracted_data: Optional[dict] = None
+    is_complete: bool = False
+    missing_required: Optional[List[str]] = None
+    ai_suggested_followups: Optional[List[str]] = None

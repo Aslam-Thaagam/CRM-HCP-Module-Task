@@ -1,296 +1,124 @@
+import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { prefillFormFromChat } from "../../store/slices/interactionSlice";
-import StructuredForm from "./StructuredForm";
-import ChatInterface from "./ChatInterface";
+import { fetchInteractions } from "../../store/slices/interactionSlice";
+import FormMode from "./FormMode";
+import ChatMode from "./ChatMode";
+import styles from "./styles.module.css";
+
+const TYPE_COLORS = {
+  Meeting: "#dbeafe",
+  Call: "#dcfce7",
+  Email: "#fef9c3",
+  Conference: "#f3e8ff",
+  "Dinner Program": "#ffe4e6",
+  "Lunch & Learn": "#ffedd5",
+  Other: "#f1f5f9",
+};
+
+const SENTIMENT_ICON = { Positive: "😊", Neutral: "😐", Negative: "😞" };
 
 export default function LogInteractionScreen() {
   const dispatch = useDispatch();
-  const { extractedData } = useSelector((s) => s.chat);
+  const { list, loading } = useSelector((s) => s.interactions);
 
-  const handleFillForm = () => {
-    if (Object.keys(extractedData).length > 0) {
-      dispatch(prefillFormFromChat(extractedData));
-    }
-  };
+  useEffect(() => {
+    dispatch(fetchInteractions());
+  }, [dispatch]);
 
   return (
-    <div style={styles.page}>
-      {/* ── Page header ── */}
-      <div style={styles.pageHeader}>
-        <div>
-          <h1 style={styles.pageTitle}>Log HCP Interaction</h1>
-          <p style={styles.pageSubtitle}>
-            Fill in the structured form on the left, or describe your interaction to the AI assistant on the right.
-          </p>
+    <div>
+      {/* Page header */}
+      <div className={styles.pageHeader}>
+        <div className={styles.pageHeaderLeft}>
+          <h1>Log HCP Interaction</h1>
+          <p>Record field visits, calls, and engagement details</p>
         </div>
-        <div style={styles.headerBadges}>
-          <span style={styles.badge}>
-            <span style={styles.badgeDot} />
-            LangGraph Agent
-          </span>
-          <span style={{ ...styles.badge, ...styles.badgeGreen }}>
-            <span style={{ ...styles.badgeDot, background: "#22c55e" }} />
-            gemma2-9b-it · Groq
+        <div className={styles.pageHeaderRight}>
+          <span className={styles.statusPill}>
+            <span className={styles.statusDot} />
+            AI Active
           </span>
         </div>
       </div>
 
-      {/* ── Split layout ── */}
-      <div style={styles.splitLayout}>
-        {/* ── LEFT: Structured Form ── */}
-        <div style={styles.leftPanel}>
-          <div style={styles.panelHeader}>
-            <div style={styles.panelHeaderLeft}>
-              <div style={styles.panelIconWrap}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/>
-                </svg>
-              </div>
-              <div>
-                <h2 style={styles.panelTitle}>Interaction Details</h2>
-                <p style={styles.panelSubtitle}>Complete the structured form below</p>
-              </div>
+      {/* Main layout: form + chat */}
+      <div className={styles.layout}>
+        {/* Form card */}
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>
+            <div className={styles.cardHeaderTitle}>
+              <div className={styles.cardIcon}>📋</div>
+              <h2>Interaction Form</h2>
             </div>
+            <span className={styles.cardHeaderMeta}>Fields auto-filled by AI</span>
           </div>
-          <div style={styles.panelBody}>
-            <StructuredForm />
+          <FormMode />
+        </div>
+
+        {/* Chat */}
+        <ChatMode />
+      </div>
+
+      {/* Interaction Logs */}
+      <div className={styles.logsSection}>
+        <div className={styles.logsHeader}>
+          <div className={styles.logsHeaderLeft}>
+            <span className={styles.logsTitle}>Interaction Logs</span>
+            <span className={styles.logsCount}>{list.length} record{list.length !== 1 ? "s" : ""}</span>
           </div>
         </div>
 
-        {/* ── Divider ── */}
-        <div style={styles.divider}>
-          <div style={styles.dividerLine} />
-          <span style={styles.dividerLabel}>or</span>
-          <div style={styles.dividerLine} />
-        </div>
+        {loading && <p className={styles.logsEmpty}>Loading...</p>}
+        {!loading && list.length === 0 && (
+          <p className={styles.logsEmpty}>No interactions logged yet. Use the form or chat above to log your first one.</p>
+        )}
 
-        {/* ── RIGHT: AI Chat ── */}
-        <div style={styles.rightPanel}>
-          <div style={styles.panelHeader}>
-            <div style={styles.panelHeaderLeft}>
-              <div style={{ ...styles.panelIconWrap, background: "#f5f3ff", border: "1.5px solid #ddd6fe" }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
+        {list.length > 0 && (
+          <div className={styles.logsGrid}>
+            {list.map((item) => (
+              <div key={item.id} className={styles.logCard}>
+                <div className={styles.logCardTop}>
+                  <div className={styles.logHcp}>{item.hcp_name}</div>
+                  <span
+                    className={styles.logTypeBadge}
+                    style={{ background: TYPE_COLORS[item.interaction_type] || "#f1f5f9" }}
+                  >
+                    {item.interaction_type}
+                  </span>
+                </div>
+
+                <div className={styles.logMeta}>
+                  <span>📅 {item.interaction_date}{item.interaction_time ? ` · ${item.interaction_time}` : ""}</span>
+                  {item.sentiment && (
+                    <span>{SENTIMENT_ICON[item.sentiment] || ""} {item.sentiment}</span>
+                  )}
+                </div>
+
+                {item.topics_discussed && (
+                  <p className={styles.logNotes}>{item.topics_discussed}</p>
+                )}
+
+                {(item.materials_shared?.length || item.samples_distributed?.length) && (
+                  <div className={styles.logTags}>
+                    {item.materials_shared?.map((m) => (
+                      <span key={m} className={styles.logTag} style={{ background: "#eff6ff", color: "#1d4ed8" }}>📄 {m}</span>
+                    ))}
+                    {item.samples_distributed?.map((s) => (
+                      <span key={s} className={styles.logTag} style={{ background: "#f0fdf4", color: "#15803d" }}>💊 {s}</span>
+                    ))}
+                  </div>
+                )}
+
+                {item.follow_up_actions && (
+                  <div className={styles.logFollowup}>
+                    <span className={styles.logFollowupLabel}>Follow-up:</span> {item.follow_up_actions}
+                  </div>
+                )}
               </div>
-              <div>
-                <h2 style={styles.panelTitle}>
-                  AI Assistant
-                  <span style={styles.aiModelBadge}>gemma2-9b-it · Groq</span>
-                </h2>
-                <p style={styles.panelSubtitle}>Log interaction via chat</p>
-              </div>
-            </div>
-            {Object.keys(extractedData).length > 0 && (
-              <button style={styles.fillFormBtn} onClick={handleFillForm} title="Copy AI-extracted data into the form">
-                ← Fill Form
-              </button>
-            )}
+            ))}
           </div>
-
-          {/* Example prompt hints */}
-          <div style={styles.chatHints}>
-            <p style={styles.hintsLabel}>Try saying:</p>
-            <div style={styles.hintsRow}>
-              {[
-                '"Met Dr. Smith, discussed Product X efficacy, positive sentiment, shared brochure"',
-                '"Phone call with Dr. Patel about Jardiance reimbursement"',
-                '"Virtual meeting with Dr. Lee, open to prescribing Dupixent"',
-              ].map((h, i) => (
-                <span key={i} style={styles.hintChip}>{h}</span>
-              ))}
-            </div>
-          </div>
-
-          <div style={styles.chatBody}>
-            <ChatInterface />
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
 }
-
-const styles = {
-  page: {
-    padding: "24px 32px",
-    maxWidth: 1440,
-    margin: "0 auto",
-    fontFamily: "Inter, sans-serif",
-  },
-  pageHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 24,
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  pageTitle: {
-    fontSize: 24,
-    fontWeight: 700,
-    color: "#0f172a",
-    margin: "0 0 4px",
-    letterSpacing: "-0.02em",
-  },
-  pageSubtitle: { fontSize: 14, color: "#64748b", margin: 0 },
-  headerBadges: { display: "flex", gap: 8, alignItems: "center" },
-  badge: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    fontSize: 12,
-    fontWeight: 600,
-    padding: "5px 12px",
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    borderRadius: 20,
-    color: "#1d4ed8",
-  },
-  badgeGreen: { background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#15803d" },
-  badgeDot: { width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", display: "inline-block" },
-
-  splitLayout: {
-    display: "flex",
-    gap: 0,
-    alignItems: "stretch",
-    background: "#fff",
-    border: "1.5px solid #e2e8f0",
-    borderRadius: 16,
-    overflow: "hidden",
-    boxShadow: "0 2px 12px rgba(0,0,0,0.07)",
-    minHeight: "calc(100vh - 160px)",
-  },
-
-  leftPanel: {
-    flex: "0 0 55%",
-    display: "flex",
-    flexDirection: "column",
-    borderRight: "1.5px solid #f1f5f9",
-    overflow: "hidden",
-  },
-  rightPanel: {
-    flex: "0 0 45%",
-    display: "flex",
-    flexDirection: "column",
-    background: "#fafbff",
-    overflow: "hidden",
-  },
-
-  divider: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    width: 0,
-    position: "relative",
-    zIndex: 1,
-  },
-  dividerLine: {
-    width: 1,
-    flex: 1,
-    background: "#e2e8f0",
-  },
-  dividerLabel: {
-    fontSize: 11,
-    fontWeight: 700,
-    color: "#94a3b8",
-    background: "#fff",
-    padding: "4px 0",
-    letterSpacing: "0.05em",
-    textTransform: "uppercase",
-    position: "absolute",
-    top: "50%",
-    transform: "translateY(-50%)",
-    left: -10,
-    width: 20,
-    textAlign: "center",
-    zIndex: 2,
-  },
-
-  panelHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "18px 24px",
-    borderBottom: "1px solid #f1f5f9",
-    background: "#fff",
-    flexShrink: 0,
-  },
-  panelHeaderLeft: { display: "flex", alignItems: "center", gap: 12 },
-  panelIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    background: "#eff6ff",
-    border: "1.5px solid #bfdbfe",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  panelTitle: {
-    fontSize: 15,
-    fontWeight: 700,
-    color: "#0f172a",
-    margin: "0 0 2px",
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  },
-  panelSubtitle: { fontSize: 12, color: "#94a3b8", margin: 0 },
-  aiModelBadge: {
-    fontSize: 10,
-    fontWeight: 600,
-    padding: "2px 7px",
-    background: "#f0fdf4",
-    color: "#15803d",
-    border: "1px solid #bbf7d0",
-    borderRadius: 6,
-  },
-  fillFormBtn: {
-    fontFamily: "Inter, sans-serif",
-    fontSize: 12,
-    fontWeight: 600,
-    padding: "6px 12px",
-    background: "#eff6ff",
-    border: "1.5px solid #bfdbfe",
-    borderRadius: 8,
-    color: "#1d4ed8",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-  },
-
-  panelBody: {
-    flex: 1,
-    overflowY: "auto",
-    padding: "20px 24px 24px",
-  },
-
-  chatHints: {
-    padding: "10px 20px 6px",
-    borderBottom: "1px solid #f1f5f9",
-    flexShrink: 0,
-    background: "#fff",
-  },
-  hintsLabel: { fontSize: 11, color: "#9ca3af", fontWeight: 600, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" },
-  hintsRow: { display: "flex", gap: 6, flexWrap: "wrap" },
-  hintChip: {
-    fontSize: 11,
-    color: "#4b5563",
-    background: "#f3f4f6",
-    border: "1px solid #e5e7eb",
-    borderRadius: 6,
-    padding: "3px 8px",
-    fontStyle: "italic",
-    lineHeight: 1.4,
-  },
-
-  chatBody: {
-    flex: 1,
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
-    padding: "12px 16px 16px",
-  },
-};

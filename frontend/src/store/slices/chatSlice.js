@@ -1,20 +1,18 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { chatApi } from "../../services/api";
-import { v4 as uuidv4 } from "uuid";
+import { mergeExtracted } from "./interactionSlice";
 
-export const sendChatMessage = createAsyncThunk(
+export const sendMessage = createAsyncThunk(
   "chat/sendMessage",
-  async ({ message, repId }, { getState, rejectWithValue }) => {
+  async ({ messages, currentState }, { dispatch, rejectWithValue }) => {
     try {
-      const { sessionId } = getState().chat;
-      const res = await chatApi.send({
-        session_id: sessionId,
-        message,
-        rep_id: repId || "rep-001",
-      });
+      const res = await chatApi.send(messages, currentState);
+      if (res.data.extracted_data) {
+        dispatch(mergeExtracted(res.data.extracted_data));
+      }
       return res.data;
-    } catch (err) {
-      return rejectWithValue(err.response?.data?.detail || "Chat error");
+    } catch (e) {
+      return rejectWithValue(e.response?.data?.detail || "Failed to send message");
     }
   }
 );
@@ -22,69 +20,40 @@ export const sendChatMessage = createAsyncThunk(
 const chatSlice = createSlice({
   name: "chat",
   initialState: {
-    sessionId: uuidv4(),
-    messages: [],          // { role, content, timestamp }
-    stage: "greeting",
-    extractedData: {},
-    interactionSaved: false,
-    savedInteractionId: null,
-    typing: false,
+    messages: [],
+    isComplete: false,
+    loading: false,
     error: null,
+    initialized: false,
   },
   reducers: {
-    resetChat(state) {
-      state.sessionId = uuidv4();
-      state.messages = [];
-      state.stage = "greeting";
-      state.extractedData = {};
-      state.interactionSaved = false;
-      state.savedInteractionId = null;
-      state.error = null;
-    },
     addUserMessage(state, action) {
-      state.messages.push({
-        role: "user",
-        content: action.payload,
-        timestamp: new Date().toISOString(),
-      });
+      state.messages.push({ role: "user", content: action.payload });
     },
-    clearChatError(state) {
+    resetChat(state) {
+      state.messages = [];
+      state.isComplete = false;
       state.error = null;
+      state.initialized = false;
     },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(sendChatMessage.pending, (state) => {
-        state.typing = true;
-        state.error = null;
+      .addCase(sendMessage.pending, (s) => { s.loading = true; s.error = null; })
+      .addCase(sendMessage.fulfilled, (s, a) => {
+        s.loading = false;
+        s.initialized = true;
+        s.messages.push({ role: "assistant", content: a.payload.message });
+        s.isComplete = a.payload.is_complete || false;
       })
-      .addCase(sendChatMessage.fulfilled, (state, action) => {
-        state.typing = false;
-        state.stage = action.payload.stage;
-        state.extractedData = action.payload.extracted_data || {};
-        state.interactionSaved = action.payload.interaction_saved;
-        state.savedInteractionId = action.payload.interaction_id;
-
-        // Add assistant reply to local messages
-        if (action.payload.reply) {
-          state.messages.push({
-            role: "assistant",
-            content: action.payload.reply,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      })
-      .addCase(sendChatMessage.rejected, (state, action) => {
-        state.typing = false;
-        state.error = action.payload;
-        state.messages.push({
-          role: "assistant",
-          content: "Sorry, I encountered an error. Please try again.",
-          timestamp: new Date().toISOString(),
-        });
+      .addCase(sendMessage.rejected, (s, a) => {
+        s.loading = false;
+        s.error = a.payload;
+        s.initialized = true;
+        s.messages.push({ role: "assistant", content: "Sorry, I encountered an error. Please try again." });
       });
   },
 });
 
-export const { resetChat, addUserMessage, clearChatError } = chatSlice.actions;
+export const { addUserMessage, resetChat } = chatSlice.actions;
 export default chatSlice.reducer;

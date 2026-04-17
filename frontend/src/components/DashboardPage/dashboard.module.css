@@ -1,0 +1,258 @@
+.page { font-family: "Inter", sans-serif; }
+
+/* Welcome */
+.welcome {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.welcome h1 {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 0.2rem;
+}
+
+.welcome p {
+  font-size: 0.82rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.date {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  white-space: nowrap;
+  margin-top: 0.25rem;
+}
+
+/* Stats */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.statCard {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  transition: box-shadow 0.15s;
+}
+.statCard:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+
+.statIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.statBody {}
+
+.statValue {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #111827;
+  line-height: 1;
+}
+
+.statLabel {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  margin-top: 0.2rem;
+}
+
+/* Two column layout */
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 1rem;
+}
+
+/* Panel */
+.panel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.panelTitle {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.panelMeta {
+  font-size: 0.72rem;
+  color: #9ca3af;
+}
+
+.panelDivider {
+  height: 1px;
+  background: #f3f4f6;
+  margin: 1rem 0;
+}
+
+.empty {
+  font-size: 0.82rem;
+  color: #9ca3af;
+  margin: 0;
+  padding: 1rem 0;
+}
+
+/* Recent list */
+.recentList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.recentRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #f9fafb;
+}
+.recentRow:last-child { border-bottom: none; }
+
+.recentLeft { min-width: 0; flex: 1; }
+
+.recentName {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recentMeta {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  margin-top: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recentRight {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.typeBadge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.18rem 0.6rem;
+  white-space: nowrap;
+}
+
+.sentimentIcon { font-size: 0.9rem; }
+
+/* Breakdown */
+.breakdownList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.breakdownRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.breakdownLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: #374151;
+  width: 130px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.breakdownDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.breakdownBar {
+  flex: 1;
+  height: 6px;
+  background: #f3f4f6;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: #2563eb;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.breakdownCount {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #6b7280;
+  width: 20px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Sentiment stats */
+.sentimentRow {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.sentimentStat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 0.75rem 0.5rem;
+}
+
+.sentimentBig { font-size: 1.4rem; }
+.sentimentNum { font-size: 1rem; font-weight: 800; color: #111827; }
+.sentimentLbl { font-size: 0.68rem; color: #9ca3af; }
+
+@media (max-width: 960px) {
+  .statsGrid { grid-template-columns: repeat(2, 1fr); }
+  .twoCol { grid-template-columns: 1fr; }
+}

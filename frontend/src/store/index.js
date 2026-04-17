@@ -1,14 +1,14 @@
 import { configureStore } from "@reduxjs/toolkit";
-import hcpReducer from "./slices/hcpSlice";
 import interactionReducer from "./slices/interactionSlice";
 import chatReducer from "./slices/chatSlice";
+import authReducer from "./slices/authSlice";
+import hcpReducer from "./slices/hcpSlice";
 
-const store = configureStore({
+export const store = configureStore({
   reducer: {
-    hcps: hcpReducer,
     interactions: interactionReducer,
     chat: chatReducer,
+    auth: authReducer,
+    hcps: hcpReducer,
   },
 });
-
-export default store;
