@@ -35,7 +35,7 @@ export default function SignupPage({ onSwitch }) {
       <div className={styles.brand}>
         <div className={styles.brandLogo}>
           <div className={styles.logoBox}>T</div>
-          <span className={styles.logoName}>Thaagam Field</span>
+          <span className={styles.logoName}>CRM HCP Field</span>
         </div>
         <h1 className={styles.brandHeading}>
           Built for <span>field reps</span> who move fast
@@ -71,7 +71,7 @@ export default function SignupPage({ onSwitch }) {
               <input
                 className={styles.input}
                 type="text"
-                placeholder="Thaagam Rep"
+                placeholder="User Rep"
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
                 required

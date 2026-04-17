@@ -23,7 +23,7 @@ export default function LoginPage({ onSwitch }) {
       <div className={styles.brand}>
         <div className={styles.brandLogo}>
           <div className={styles.logoBox}>T</div>
-          <span className={styles.logoName}>Thaagam Field</span>
+          <span className={styles.logoName}>CRM HCP Field</span>
         </div>
         <h1 className={styles.brandHeading}>
           Your <span>AI-powered</span> field rep companion
